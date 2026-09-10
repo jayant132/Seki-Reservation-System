@@ -59,5 +59,5 @@ func RequireRole(role string) func(http.Handler) http.Handler {
 func writeError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	w.Write([]byte(`{"error":"` + msg + `"}`))
+	_, _ = w.Write([]byte(`{"error":"` + msg + `"}`))
 }

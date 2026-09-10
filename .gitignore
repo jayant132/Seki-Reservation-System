@@ -1,0 +1,6 @@
+.env
+seki
+*.log
+.DS_Store
+/tmp/
+streamlit_app/__pycache__/

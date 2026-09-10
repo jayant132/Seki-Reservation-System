@@ -1,0 +1,79 @@
+{
+  "title": "Seki \u2014 Reservation Engine Overview",
+  "uid": "seki-overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Bookings Created / sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(seki_bookings_created_total[1m])",
+          "legendFormat": "created/sec"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Booking Conflicts / sec (proves the exclusion constraint is doing its job under load)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(seki_booking_conflicts_total[1m])",
+          "legendFormat": "conflicts/sec"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Bookings Cancelled / sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(seki_bookings_cancelled_total[1m])",
+          "legendFormat": "cancelled/sec"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "HTTP Request Latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(seki_http_request_duration_seconds_bucket[1m])) by (le, route))",
+          "legendFormat": "p50 {{route}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(seki_http_request_duration_seconds_bucket[1m])) by (le, route))",
+          "legendFormat": "p95 {{route}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(seki_http_request_duration_seconds_bucket[1m])) by (le, route))",
+          "legendFormat": "p99 {{route}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Requests by Status Code",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(seki_http_request_duration_seconds_count[1m])) by (status)",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    }
+  ]
+}

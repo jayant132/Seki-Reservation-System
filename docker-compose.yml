@@ -1,0 +1,142 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: seki-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: seki
+      POSTGRES_PASSWORD: seki
+      POSTGRES_DB: seki
+    ports:
+      - "5432:5432"
+    volumes:
+      - seki_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U seki -d seki"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: seki-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # All-in-one Jaeger build: receives traces over OTLP-gRPC (port 4317)
+  # from the API and serves the trace-explorer UI on 16686. This is what
+  # turns "we added tracing" from a checkbox into something you can
+  # actually click through during a load test and watch requests race.
+  jaeger:
+    image: jaegertracing/all-in-one:1.55
+    container_name: seki-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "4317:4317" # OTLP gRPC receiver
+
+  # One-shot container that applies all pending migrations and exits.
+  # The api service waits for this to complete successfully before it
+  # starts, so the schema is guaranteed to exist before the app boots.
+  migrate:
+    image: migrate/migrate:v4.17.1
+    container_name: seki-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/migrations
+    command:
+      [
+        "-path", "/migrations",
+        "-database", "postgres://seki:seki@postgres:5432/seki?sslmode=disable",
+        "up"
+      ]
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: seki-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      jaeger:
+        condition: service_started
+    environment:
+      PORT: "8080"
+      ENV: "production"
+      DATABASE_URL: "postgres://seki:seki@postgres:5432/seki?sslmode=disable"
+      REDIS_ADDR: "redis:6379"
+      JWT_SECRET: "change-this-in-real-production-to-a-long-random-secret"
+      OTLP_ENDPOINT: "jaeger:4317"
+    ports:
+      - "8080:8080"
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: seki-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+
+  # Grafana pre-provisioned with the Prometheus datasource and a Seki
+  # dashboard (booking throughput, conflict rate, request latency) so
+  # metrics are viewable immediately with no manual setup.
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: seki-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+  # Thin demo/ops layer built with Streamlit. It is a client of the API,
+  # not part of it — every action it performs (register, book, cancel,
+  # verify the audit chain) is a real HTTP call against the live backend
+  # over the internal Docker network. No mocked or hardcoded data.
+  ui:
+    build:
+      context: ./streamlit_app
+      dockerfile: Dockerfile
+    container_name: seki-ui
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      API_BASE_URL: "http://api:8080/api/v1"
+      JAEGER_UI_URL: "http://localhost:16686"
+    ports:
+      - "8501:8501"
+
+volumes:
+  seki_pgdata:

@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS audit_log;
+DROP TABLE IF EXISTS idempotency_keys;
+DROP TABLE IF EXISTS bookings;
+DROP TABLE IF EXISTS resources;
+DROP TABLE IF EXISTS users;

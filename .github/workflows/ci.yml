@@ -9,47 +9,62 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
           cache: true
+
       - name: golangci-lint
-        uses: golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v6
         with:
           version: latest
 
   unit-test:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
           cache: true
+
       - name: Run unit tests
         run: go test ./internal/... -race -cover -v
 
   integration-test:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
           cache: true
+
       - name: Install golang-migrate CLI
         run: |
           curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.1/migrate.linux-amd64.tar.gz | tar xvz
           sudo mv migrate /usr/local/bin/migrate
+
       - name: Run concurrency + idempotency integration tests
         run: go test ./test/integration/... -v -timeout 5m
 
   build:
     runs-on: ubuntu-latest
-    needs: [unit-test, integration-test]
+
+    needs:
+      - unit-test
+      - integration-test
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Build Docker image
         run: docker build -t seki:ci .
